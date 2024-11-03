@@ -1,0 +1,8 @@
+# Ignore build and temporary files
+bin/
+obj/
+.vs/
+
+# Additional rules (if needed)
+*.log
+*.tmp
