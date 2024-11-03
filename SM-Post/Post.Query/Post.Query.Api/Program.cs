@@ -1,9 +1,13 @@
 using Confluent.Kafka;
 using CQRS.Core.Consumers;
+using CQRS.Core.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Post.Query.Api.Queries;
+using Post.Query.Domain.Entities;
 using Post.Query.Domain.Repositories;
 using Post.Query.Infrastructure.Consumers;
 using Post.Query.Infrastructure.DataAccess;
+using Post.Query.Infrastructure.Dispatchers;
 using Post.Query.Infrastructure.Handlers;
 using Post.Query.Infrastructure.Repositories;
 
@@ -20,10 +24,23 @@ dataContext.Database.EnsureCreated();
 
 builder.Services.AddScoped<IPostRepository, PostRepository>();
 builder.Services.AddScoped<ICommentRepository, CommentRepository>();
+builder.Services.AddScoped<IPostQueryHandler, PostQueryHandler>();
 builder.Services.AddScoped<IEventHandler, Post.Query.Infrastructure.Handlers.EventHandler>();
 builder.Services.Configure<ConsumerConfig>(builder.Configuration.GetSection(nameof(ConsumerConfig)));
 builder.Services.AddScoped<IEventConsumer, EventConsumer>();
 builder.Services.AddHostedService<ConsumerHostedService>();
+
+// register the query handler methods
+var postQueryHandler = builder.Services.BuildServiceProvider().GetRequiredService<IPostQueryHandler>();
+var postQueryDispatcher = new PostQueryDispatcher();
+postQueryDispatcher.RegisterHandler<FindAllPostsQuery>(postQueryHandler.HandleAsync);
+postQueryDispatcher.RegisterHandler<FindPostByIdQuery>(postQueryHandler.HandleAsync);
+postQueryDispatcher.RegisterHandler<FindPostsWithCommentsQuery>(postQueryHandler.HandleAsync);
+postQueryDispatcher.RegisterHandler<FindPostsWithLikesQuery>(postQueryHandler.HandleAsync);
+postQueryDispatcher.RegisterHandler<FindPostsByAuthorQuery>(postQueryHandler.HandleAsync);
+
+builder.Services.AddSingleton<IQueryDispatcher<PostEntity>>(_ => postQueryDispatcher);
+builder.Services.AddControllers();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -38,31 +55,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.MapControllers();
 app.UseHttpsRedirection();
-
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
-
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
